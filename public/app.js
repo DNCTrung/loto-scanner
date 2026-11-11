@@ -12,6 +12,7 @@ let ocrPreview = '';
 let user = null;
 let authBusy = false;
 let syncBusy = false;
+let guestMode = sessionStorage.getItem('loto-guest-mode') === '1';
 
 function load() {
   try {
@@ -37,8 +38,10 @@ async function loadRemote() {
   if (data) { state = { cards: Array.isArray(data.cards) ? data.cards.map(c => ({ ...c, grid: normalizeRows(c.grid) })) : [], called: Array.isArray(data.called) ? data.called : [], rule: data.rule || 'line' }; localStorage.setItem(KEY, JSON.stringify(state)); view = state.cards.length ? 'home' : 'add'; render(); }
   else await syncState();
 }
-async function auth(action) { const email = document.querySelector('#auth-email')?.value.trim(); const password = document.querySelector('#auth-password')?.value; if (!email || !password) return toast('Nhập email và mật khẩu nha'); authBusy = true; try { const result = action === 'signup' ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password }); if (result.error) throw result.error; if (action === 'signup' && !result.data.session) toast('Kiểm tra email để xác nhận tài khoản nha'); } catch (e) { toast(e.message || 'Đăng nhập lỗi'); } finally { authBusy = false; } }
-async function logout() { await supabase.auth.signOut(); user = null; render(); }
+async function auth(action) { const email = document.querySelector('#auth-email')?.value.trim(); const password = document.querySelector('#auth-password')?.value; if (!email || !password) return toast('Nhập email và mật khẩu nha'); authBusy = true; guestMode = false; sessionStorage.removeItem('loto-guest-mode'); try { const result = action === 'signup' ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password }); if (result.error) throw result.error; if (action === 'signup' && !result.data.session) toast('Kiểm tra email để xác nhận tài khoản nha'); } catch (e) { toast(e.message || 'Đăng nhập lỗi'); } finally { authBusy = false; } }
+async function logout() { await supabase.auth.signOut(); user = null; guestMode = false; sessionStorage.removeItem('loto-guest-mode'); render(); }
+function enterGuest() { guestMode = true; sessionStorage.setItem('loto-guest-mode', '1'); render(); }
+function leaveGuest() { guestMode = false; sessionStorage.removeItem('loto-guest-mode'); render(); }
 function shareCode() { return crypto.getRandomValues(new Uint32Array(2)).reduce((s, n) => s + n.toString(36).toUpperCase(), '').slice(0, 8).padEnd(8, '0'); }
 async function shareState() {
   if (!user) return toast('Pa cần đăng nhập để chia sẻ');
@@ -60,12 +63,12 @@ async function loadShare() {
 }
 function esc(x) { return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg) { const el = document.querySelector('#toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 2600); }
-function render() { document.querySelector('#app').innerHTML = !user ? authView() : view === 'play' ? playView() : view === 'add' ? addView() : homeView(); bind(); }
-function authView() { return `<section class="hero"><h1>🎱 Loto Scanner</h1><p>Đăng nhập để đồng bộ vé giữa các thiết bị.</p></section><div class="card-box auth-box"><input id="auth-email" type="email" placeholder="Email" autocomplete="email"/><input id="auth-password" type="password" placeholder="Mật khẩu (tối thiểu 6 ký tự)" autocomplete="current-password"/><div class="row"><button class="primary" data-action="login">Đăng nhập</button><button data-action="signup">Tạo tài khoản</button></div><p class="muted">Pa có thể dùng cùng tài khoản trên điện thoại và máy khác.</p></div>`; }
+function render() { document.querySelector('#app').innerHTML = !user && !guestMode ? authView() : view === 'play' ? playView() : view === 'add' ? addView() : homeView(); bind(); }
+function authView() { return `<section class="hero"><h1>🎱 Loto Scanner</h1><p>Đăng nhập để đồng bộ vé giữa các thiết bị.</p></section><div class="card-box auth-box"><input id="auth-email" type="email" placeholder="Email" autocomplete="email"/><input id="auth-password" type="password" placeholder="Mật khẩu (tối thiểu 6 ký tự)" autocomplete="current-password"/><div class="row"><button class="primary" data-action="login">Đăng nhập</button><button data-action="signup">Tạo tài khoản</button></div><button class="ghost" data-action="guest">Dùng không cần đăng ký</button><p class="muted">Chế độ khách lưu trên thiết bị này. Đăng nhập khi cần đồng bộ hoặc chia sẻ.</p></div>`; }
 function header(title, back = 'home') { return `<div class="play-top"><button class="ghost small" data-action="view" data-view="${back}">← Quay lại</button><strong>${esc(title)}</strong><span></span></div>`; }
 function grid(card, called, compact = false, highlight = []) { const set = calledSet(called); return `<div class="grid ${compact ? 'compact' : ''}">${card.flatMap((row,r) => row.map((n,c) => `<div class="cell ${n === null ? 'free' : ''} ${isMarked(card,r,c,set) ? 'marked' : ''} ${highlight.some(([rr,cc]) => rr===r&&cc===c) ? 'on-line' : ''} ${n === lastCalled(called) ? 'last' : ''}">${n === null ? 'FREE' : esc(n)}</div>`)).join('')}</div>`; }
 function homeView() {
-  return `<section class="hero"><h1>🎱 Loto Scanner</h1><p>Chụp vé, đồng bộ trên thiết bị, rồi nhập số được gọi để tự highlight.</p><p class="muted">${esc(user?.email || '')} · <button class="small ghost" data-action="logout">Đăng xuất</button></p></section>
+  return `<section class="hero"><h1>🎱 Loto Scanner</h1><p>Chụp vé, đồng bộ trên thiết bị, rồi nhập số được gọi để tự highlight.</p><p class="muted">${user ? `${esc(user.email)} · <button class="small ghost" data-action="logout">Đăng xuất</button>` : `Chế độ khách · <button class="small ghost" data-action="guest-exit">Đăng nhập để đồng bộ</button>`}</p></section>
     <div class="row"><button class="primary" data-action="view" data-view="add">＋ Thêm vé</button>${state.cards.length ? `<button data-action="view" data-view="play">▶ Bắt đầu chơi</button><button data-action="share">🔗 Chia sẻ</button>` : ''}</div><div class="spacer"></div>
     ${state.cards.length ? `<ul class="card-list">${state.cards.map((c,i) => `<li class="card-box"><div class="card-head"><span class="card-title">${esc(c.name || `Vé ${i+1}`)}</span><span class="card-sub">${cardNumbers(c.grid).length}/24 số</span></div>${grid(c.grid,state.called,true)}<div class="row" style="margin-top:10px"><button class="small" data-action="edit" data-id="${c.id}">Sửa</button><button class="small danger" data-action="delete" data-id="${c.id}">Xóa</button></div></li>`).join('')}</ul>` : `<div class="empty card-box"><div class="big">📸</div><div>Chưa có vé nào</div><p>Thêm vé bằng cách chụp ảnh hoặc nhập số tay.</p></div>`}
     <p class="footer-note">Dữ liệu hiện lưu cục bộ trên thiết bị/trình duyệt.</p>`;
@@ -86,7 +89,9 @@ function bind() {
   document.querySelectorAll('[data-action="view"]').forEach(b=>b.onclick=()=>{view=b.dataset.view; editingId=null; ocrPreview=''; render();});
   document.querySelector('[data-action="login"]')?.addEventListener('click',()=>auth('login'));
   document.querySelector('[data-action="signup"]')?.addEventListener('click',()=>auth('signup'));
+  document.querySelector('[data-action="guest"]')?.addEventListener('click',enterGuest);
   document.querySelector('[data-action="logout"]')?.addEventListener('click',logout);
+  document.querySelector('[data-action="guest-exit"]')?.addEventListener('click',leaveGuest);
   document.querySelector('[data-action="share"]')?.addEventListener('click',shareState);
   document.querySelectorAll('[data-action="edit"]').forEach(b=>b.onclick=()=>{editingId=b.dataset.id;view='add';render();});
   document.querySelectorAll('[data-action="delete"]').forEach(b=>b.onclick=()=>{if(confirm('Xóa vé này?')){state.cards=state.cards.filter(c=>c.id!==b.dataset.id);save();render();}});
