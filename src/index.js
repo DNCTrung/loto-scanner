@@ -137,6 +137,14 @@ async function readImage(request) {
     const b64 = m ? m[2] : dataUrl;
     return { bytes: fromBase64(b64), mime };
   }
+  // Accept both multipart uploads (the browser UI uses this) and raw image bodies.
+  // Some mobile browsers omit or mangle the file MIME type when sending a raw Blob.
+  if (type.startsWith('image/') || type === 'application/octet-stream') {
+    return { bytes: new Uint8Array(await request.arrayBuffer()), mime: type.startsWith('image/') ? type : 'image/jpeg' };
+  }
+  if (!type.includes('multipart/form-data') && !type.includes('application/x-www-form-urlencoded')) {
+    throw new Error(`Content-Type không hỗ trợ: ${type || '(trống)'}`);
+  }
   const form = await request.formData();
   const file = form.get('image') || form.get('file');
   if (!file || typeof file === 'string') throw new Error('Thiếu file ảnh');
