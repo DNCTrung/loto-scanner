@@ -220,3 +220,7 @@ select {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .footer-note { color: #5d6b88; font-size: 12px; margin-top: 18px; text-align: center; }
+
+.auth-box { max-width: 460px; margin: 0 auto; display: grid; gap: 12px; }
+.auth-box input { width: 100%; padding: 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text); font: inherit; }
+.muted { opacity: .72; font-size: .9rem; }
