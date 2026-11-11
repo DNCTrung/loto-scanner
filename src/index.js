@@ -5,7 +5,8 @@ const DEFAULT_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 const PROMPT = `You are a precise OCR engine reading a printed 75-ball bingo card.
 Return ONLY minified JSON, no markdown, no commentary, matching exactly:
-{"rows":[[5 numbers],[5 numbers],[5 numbers],[5 numbers],[5 numbers]]}
+{"ticketId":"000","rows":[[5 numbers],[5 numbers],[5 numbers],[5 numbers],[5 numbers]]}
+If a printed ticket/serial number appears with a # prefix (for example #000), extract only the digits into ticketId. If none is visible, use null.
 
 How to read it:
 - The card has a header row with the letters B I N G O above five columns.
@@ -104,12 +105,12 @@ async function handleOcr(request, env) {
     try {
       const res = await env.AI.run(model, attempt.input);
       const text = extractText(res);
-      const rows = extractRows(text);
-      if (!rows) {
+      const parsed = extractCard(text);
+      if (!parsed) {
         failures.push(`${attempt.label}: không tìm thấy JSON trong trả lời`);
         continue;
       }
-      return json({ ok: true, rows, model, format: attempt.label, raw: text.slice(0, 1200) });
+      return json({ ok: true, ...parsed, model, format: attempt.label, raw: text.slice(0, 1200) });
     } catch (err) {
       failures.push(`${attempt.label}: ${String(err.message || err).slice(0, 300)}`);
     }
@@ -165,7 +166,7 @@ function extractText(res) {
 }
 
 /** Pull the first {...} block out of a model answer and normalise it to 5x5. */
-export function extractRows(text) {
+export function extractCard(text) {
   if (!text) return null;
   let cleaned = String(text).replace(/```(?:json)?/gi, '').trim();
   const start = cleaned.indexOf('{');
@@ -195,8 +196,12 @@ export function extractRows(text) {
     rows.push(out);
   }
   rows[2][2] = 'FREE';
-  return rows;
+  const rawId = obj.ticketId ?? obj.ticket ?? obj.serial ?? null;
+  const ticketId = rawId == null ? null : String(rawId).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 64) || null;
+  return { rows, ticketId };
 }
+
+export function extractRows(text) { return extractCard(text)?.rows || null; }
 
 function toCell(v) {
   if (v === null || v === undefined) return null;
