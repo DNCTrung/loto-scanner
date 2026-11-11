@@ -44,9 +44,8 @@ function enterGuest() { guestMode = true; sessionStorage.setItem('loto-guest-mod
 function leaveGuest() { guestMode = false; sessionStorage.removeItem('loto-guest-mode'); render(); }
 function shareCode() { return crypto.getRandomValues(new Uint32Array(2)).reduce((s, n) => s + n.toString(36).toUpperCase(), '').slice(0, 8).padEnd(8, '0'); }
 async function shareState() {
-  if (!user) return toast('Pa cần đăng nhập để chia sẻ');
   const code = shareCode();
-  const { error } = await supabase.from('loto_shares').insert({ code, owner_id: user.id, state: { cards: state.cards, called: state.called, rule: state.rule }, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() });
+  const { error } = await supabase.from('loto_shares').insert({ code, owner_id: user?.id || null, state: { cards: state.cards, called: state.called, rule: state.rule }, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() });
   if (error) return toast('Chưa chia sẻ được: '+error.message);
   const link = `${location.origin}${location.pathname}?share=${code}`;
   try { await navigator.clipboard.writeText(link); } catch {}

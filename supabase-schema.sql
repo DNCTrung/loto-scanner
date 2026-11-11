@@ -20,7 +20,7 @@ create policy "Users can update own loto state" on public.loto_states for update
 -- Optional shareable game sessions. Add this before enabling the Share button.
 create table if not exists public.loto_shares (
   code text primary key check (code ~ '^[A-Z0-9]{8}$'),
-  owner_id uuid not null references auth.users(id) on delete cascade,
+  owner_id uuid references auth.users(id) on delete cascade,
   state jsonb not null default '{}'::jsonb,
   expires_at timestamptz,
   created_at timestamptz not null default now()
@@ -29,4 +29,8 @@ alter table public.loto_shares enable row level security;
 drop policy if exists "Owners manage shares" on public.loto_shares;
 drop policy if exists "Anyone can read active shares" on public.loto_shares;
 create policy "Owners manage shares" on public.loto_shares for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
+create policy "Guests can create shares" on public.loto_shares for insert to anon with check (owner_id is null);
 create policy "Anyone can read active shares" on public.loto_shares for select using (expires_at is null or expires_at > now());
+
+-- If loto_shares was already created with owner_id NOT NULL, run this migration too:
+-- alter table public.loto_shares alter column owner_id drop not null;
