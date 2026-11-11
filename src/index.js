@@ -16,7 +16,9 @@ How to read it:
 - Column ranges: B=1-15, I=16-30, N=31-45, G=46-60, O=61-75. Use these to correct misread digits
   (e.g. a "1" read as "7" in column B becomes 1..15 only if it still fits the range).
 - If a digit is genuinely unreadable, use null for that cell rather than guessing.
-- Ignore card serial numbers, barcodes, logos and text outside the 5x5 grid.
+- The ticket number is the number immediately following the large # in the upper-right header (this is separate from the grid). Read every digit exactly; for example #388 means ticketId "388", not "338".
+- Ignore the long barcode/serial text at the bottom and all event/title text.
+- Before answering, verify every column: B values must be 1-15, I 16-30, N 31-45, G 46-60, O 61-75; values in each column must increase from top to bottom. Never invent a plausible-looking card. If a cell is unclear, use null.
 
 Example shape of the answer:
 {"rows":[[2,17,31,46,63],[3,18,32,48,65],[4,24,"FREE",49,67],[12,26,41,59,68],[13,30,44,60,73]]}`;
@@ -106,7 +108,7 @@ async function handleOcr(request, env) {
       const res = await env.AI.run(model, attempt.input);
       const text = extractText(res);
       const parsed = extractCard(text);
-      if (!parsed) {
+      if (!parsed || !isValidCard(parsed.rows)) {
         failures.push(`${attempt.label}: không tìm thấy JSON trong trả lời`);
         continue;
       }
@@ -197,7 +199,7 @@ export function extractCard(text) {
   }
   rows[2][2] = 'FREE';
   const rawId = obj.ticketId ?? obj.ticket ?? obj.serial ?? null;
-  const ticketId = rawId == null ? null : String(rawId).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 64) || null;
+  const ticketId = rawId == null ? null : String(rawId).replace(/^.*?#/, '').replace(/[^0-9]/g, '').slice(0, 64) || null;
   return { rows, ticketId };
 }
 
@@ -234,4 +236,19 @@ function json(data, status = 200) {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
+}
+
+function isValidCard(rows) {
+  if (!Array.isArray(rows) || rows.length !== 5 || rows.some(r => !Array.isArray(r) || r.length !== 5)) return false;
+  const ranges = [[1, 15], [16, 30], [31, 45], [46, 60], [61, 75]];
+  for (let c = 0; c < 5; c++) {
+    let previous = 0;
+    for (let r = 0; r < 5; r++) {
+      if (r === 2 && c === 2) continue;
+      const value = rows[r][c];
+      if (!Number.isInteger(value) || value < ranges[c][0] || value > ranges[c][1] || value <= previous) return false;
+      previous = value;
+    }
+  }
+  return true;
 }
