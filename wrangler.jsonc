@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "loto-scanner",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  // Workers AI: đọc vé từ ảnh (vision model). Không cần API key, chạy trong account Cloudflare.
+  "ai": { "binding": "AI" },
+
+  // Static app. Worker chỉ chạy trước cho /api/*, còn lại để assets lo.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "vars": {
+    "VISION_MODEL": "@cf/meta/llama-4-scout-17b-16e-instruct"
+  }
+}
